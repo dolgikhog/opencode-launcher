@@ -1,6 +1,11 @@
 #!/bin/bash
 
 REBUILD=false
+WEB_MODE=false
+WEB_PORT=3000
+SERVER_PASSWORD=""
+
+USAGE="Usage: start-opencode [--rebuild] [--web [--web-port <port>] [--server-password <password>]] <path-to-project>"
 
 # Parse flags
 while [[ "$1" == --* ]]; do
@@ -9,9 +14,21 @@ while [[ "$1" == --* ]]; do
       REBUILD=true
       shift
       ;;
+    --web)
+      WEB_MODE=true
+      shift
+      ;;
+    --web-port)
+      WEB_PORT="$2"
+      shift 2
+      ;;
+    --server-password)
+      SERVER_PASSWORD="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: start-opencode [--rebuild] <path-to-project>"
+      echo "$USAGE"
       exit 1
       ;;
   esac
@@ -19,7 +36,7 @@ done
 
 # Ensure a project path was provided
 if [ -z "$1" ]; then
-  echo "Usage: start-opencode [--rebuild] <path-to-project>"
+  echo "$USAGE"
   exit 1
 fi
 
@@ -99,16 +116,43 @@ EOF
   fi
 fi
 
-echo "Starting OpenCode securely isolated in: $PROJECT_PATH"
+# Build the docker run command
+DOCKER_ARGS=(
+  --rm -it
+  -u "$(id -u):$(id -g)"
+  -e HOME=/home/opencode_user
+  -e "GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -i /home/opencode_user/.ssh/id_ed25519 -i /home/opencode_user/.ssh/id_rsa"
+  -e "GH_TOKEN=${GH_TOKEN}"
+  -v "$PROJECT_PATH:/workspace"
+  -v "$CONFIG_DIR:/home/opencode_user"
+  -v "$HOME/.ssh:/home/opencode_user/.ssh:ro"
+  -v "$HOME/.gitconfig:/home/opencode_user/.gitconfig:ro"
+)
+
+# Extra args for web mode
+OPENCODE_CMD=()
+if [ "$WEB_MODE" = true ]; then
+  DOCKER_ARGS+=(-p "${WEB_PORT}:${WEB_PORT}")
+
+  if [ -n "$SERVER_PASSWORD" ]; then
+    DOCKER_ARGS+=(-e "OPENCODE_SERVER_PASSWORD=${SERVER_PASSWORD}")
+  fi
+
+  OPENCODE_CMD=(web --port "$WEB_PORT" --hostname 0.0.0.0)
+fi
+
+# Print startup info
+if [ "$WEB_MODE" = true ]; then
+  echo "Starting OpenCode web interface for: $PROJECT_PATH"
+  echo "  URL: http://localhost:${WEB_PORT}"
+  if [ -n "$SERVER_PASSWORD" ]; then
+    echo "  Auth enabled (username: opencode)"
+  else
+    echo "  WARNING: No --server-password set. The web interface is unprotected."
+  fi
+else
+  echo "Starting OpenCode securely isolated in: $PROJECT_PATH"
+fi
 
 # Run the container
-docker run --rm -it \
-  -u "$(id -u):$(id -g)" \
-  -e HOME=/home/opencode_user \
-  -e GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -i /home/opencode_user/.ssh/id_ed25519 -i /home/opencode_user/.ssh/id_rsa" \
-  -e GH_TOKEN="${GH_TOKEN}" \
-  -v "$PROJECT_PATH:/workspace" \
-  -v "$CONFIG_DIR:/home/opencode_user" \
-  -v "$HOME/.ssh:/home/opencode_user/.ssh:ro" \
-  -v "$HOME/.gitconfig:/home/opencode_user/.gitconfig:ro" \
-  "$IMAGE_NAME"
+docker run "${DOCKER_ARGS[@]}" "$IMAGE_NAME" "${OPENCODE_CMD[@]}"

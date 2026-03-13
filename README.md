@@ -38,6 +38,40 @@ Rebuild the Docker image from scratch:
 start-opencode --rebuild <path-to-project>
 ```
 
+## Web Mode
+
+Run OpenCode as a web application accessible from your browser:
+
+```bash
+start-opencode --web <path-to-project>
+```
+
+This starts the container with a web server on port `3000` by default. Open `http://localhost:3000` in your browser to access the interface.
+
+### Custom port
+
+```bash
+start-opencode --web --web-port 8080 <path-to-project>
+```
+
+### Authentication
+
+To protect the web interface with a password, use the `--server-password` flag:
+
+```bash
+start-opencode --web --server-password mySecretPassword <path-to-project>
+```
+
+When a password is set, your browser will prompt you for credentials on first visit. The default username is `opencode`.
+
+> **Note:** If you don't set a password, the web interface will be accessible to anyone who can reach the port. Always use `--server-password` when exposing the server on a network.
+
+### Combining flags
+
+```bash
+start-opencode --rebuild --web --web-port 8080 --server-password myPassword <path-to-project>
+```
+
 ## GitHub CLI Authentication
 
 The container uses the `GH_TOKEN` environment variable to authenticate with GitHub. To enable `gh` commands inside the container, generate a personal access token and export it before running the script:
