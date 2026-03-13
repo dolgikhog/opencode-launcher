@@ -6,6 +6,7 @@ _start-opencode() {
     '--web[Start OpenCode as a web application in the browser]' \
     '--web-port[Port for the web server (default: 3000)]:port:' \
     '--server-password[Password for HTTP Basic Auth]:password:' \
+    '--server-username[Username for HTTP Basic Auth (default: opencode)]:username:' \
     '1:project directory:_directories'
 }
 

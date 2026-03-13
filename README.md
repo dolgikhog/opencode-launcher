@@ -62,14 +62,18 @@ To protect the web interface with a password, use the `--server-password` flag:
 start-opencode --web --server-password mySecretPassword <path-to-project>
 ```
 
-When a password is set, your browser will prompt you for credentials on first visit. The default username is `opencode`.
+When a password is set, your browser will prompt you for credentials on first visit. The default username is `opencode`. To use a custom username:
+
+```bash
+start-opencode --web --server-password mySecretPassword --server-username admin <path-to-project>
+```
 
 > **Note:** If you don't set a password, the web interface will be accessible to anyone who can reach the port. Always use `--server-password` when exposing the server on a network.
 
 ### Combining flags
 
 ```bash
-start-opencode --rebuild --web --web-port 8080 --server-password myPassword <path-to-project>
+start-opencode --rebuild --web --web-port 8080 --server-password myPassword --server-username admin <path-to-project>
 ```
 
 ## GitHub CLI Authentication

@@ -4,8 +4,9 @@ REBUILD=false
 WEB_MODE=false
 WEB_PORT=3000
 SERVER_PASSWORD=""
+SERVER_USERNAME=""
 
-USAGE="Usage: start-opencode [--rebuild] [--web [--web-port <port>] [--server-password <password>]] <path-to-project>"
+USAGE="Usage: start-opencode [--rebuild] [--web [--web-port <port>] [--server-password <password>] [--server-username <username>]] <path-to-project>"
 
 # Parse flags and positional arguments (order-independent)
 PROJECT_ARG=""
@@ -25,6 +26,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --server-password)
       SERVER_PASSWORD="$2"
+      shift 2
+      ;;
+    --server-username)
+      SERVER_USERNAME="$2"
       shift 2
       ;;
     --*)
@@ -143,6 +148,10 @@ if [ "$WEB_MODE" = true ]; then
     DOCKER_ARGS+=(-e "OPENCODE_SERVER_PASSWORD=${SERVER_PASSWORD}")
   fi
 
+  if [ -n "$SERVER_USERNAME" ]; then
+    DOCKER_ARGS+=(-e "OPENCODE_SERVER_USERNAME=${SERVER_USERNAME}")
+  fi
+
   OPENCODE_CMD=(web --port "$WEB_PORT" --hostname 0.0.0.0)
 fi
 
@@ -151,7 +160,7 @@ if [ "$WEB_MODE" = true ]; then
   echo "Starting OpenCode web interface for: $PROJECT_PATH"
   echo "  URL: http://localhost:${WEB_PORT}"
   if [ -n "$SERVER_PASSWORD" ]; then
-    echo "  Auth enabled (username: opencode)"
+    echo "  Auth enabled (username: ${SERVER_USERNAME:-opencode})"
   else
     echo "  WARNING: No --server-password set. The web interface is unprotected."
   fi
