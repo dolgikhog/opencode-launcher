@@ -105,9 +105,10 @@ echo "Starting OpenCode securely isolated in: $PROJECT_PATH"
 docker run --rm -it \
   -u "$(id -u):$(id -g)" \
   -e HOME=/home/opencode_user \
-  -e GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no" \
+  -e GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -i /home/opencode_user/.ssh/id_ed25519 -i /home/opencode_user/.ssh/id_rsa" \
   -v "$PROJECT_PATH:/workspace" \
   -v "$CONFIG_DIR:/home/opencode_user" \
   -v "$HOME/.ssh:/home/opencode_user/.ssh:ro" \
   -v "$HOME/.gitconfig:/home/opencode_user/.gitconfig:ro" \
+  -v "$HOME/.config/gh:/home/opencode_user/.config/gh:ro" \
   "$IMAGE_NAME"
