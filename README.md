@@ -1,4 +1,4 @@
-# start-opencode
+# start-opencode.sh
 
 Run OpenCode CLI inside a sandboxed Docker container. Your project is mounted at `/workspace`, config and auth keys persist across runs, and SSH/git access works out of the box.
 
@@ -6,7 +6,7 @@ Run OpenCode CLI inside a sandboxed Docker container. Your project is mounted at
 
 ```
 .
-├── start-opencode              # Main script (builds + runs the container)
+├── start-opencode.sh           # Main script (builds + runs the container)
 ├── opencode.json               # Base OpenCode config (plugins, models, shared settings)
 ├── config/                     # Base agents, skills, commands, plugins (applied to all projects)
 │   ├── agents/
@@ -29,7 +29,7 @@ Clone the repo and make the script available on your PATH:
 
 ```bash
 git clone <repo-url>
-ln -s "$(pwd)/start-opencode" /usr/local/bin/start-opencode
+ln -s "$(pwd)/start-opencode.sh" /usr/local/bin/start-opencode
 ```
 
 ## Usage
