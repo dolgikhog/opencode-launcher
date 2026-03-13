@@ -1,0 +1,74 @@
+#!/bin/bash
+
+# Ensure a project path was provided
+if [ -z "$1" ]; then
+  echo "Usage: start-opencode <path-to-project>"
+  exit 1
+fi
+
+# Get the absolute path of the project
+PROJECT_PATH=$(realpath "$1")
+
+# Verify the directory exists
+if [ ! -d "$PROJECT_PATH" ]; then
+  echo "Error: Directory '$PROJECT_PATH' does not exist."
+  exit 1
+fi
+
+IMAGE_NAME="opencode-sandbox"
+# Directory on your host to securely persist OpenCode configuration and AI auth keys
+CONFIG_DIR="$HOME/.opencode_docker_config"
+mkdir -p "$CONFIG_DIR"
+
+# Build the Docker image if it hasn't been built yet
+if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+  echo "Docker image '$IMAGE_NAME' not found. Building it now (this only happens once)..."
+  
+  # Embeds the Dockerfile directly to keep this a single-file solution
+  docker build -t "$IMAGE_NAME" - << 'EOF'
+FROM ubuntu:24.04
+
+# Prevent interactive prompts during package installations
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install essential dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    wget \
+    git \
+    default-jre \
+    nodejs \
+    npm \
+    python3 \
+    build-essential \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install OpenCode CLI and make it globally accessible for the non-root user
+RUN curl -fsSL https://opencode.ai/install | bash && \
+    BIN_PATH=$(find /root -name "opencode" -type f -executable | head -n 1) && \
+    mv "$BIN_PATH" /usr/local/bin/opencode && \
+    chmod +x /usr/local/bin/opencode
+
+# Set default workspace
+WORKDIR /workspace
+ENTRYPOINT ["opencode"]
+EOF
+
+  if [ $? -ne 0 ]; then
+    echo "Failed to build the Docker image."
+    exit 1
+  fi
+fi
+
+echo "Starting OpenCode securely isolated in: $PROJECT_PATH"
+
+# Run the container
+docker run --rm -it \
+  -u "$(id -u):$(id -g)" \
+  -e HOME=/home/opencode_user \
+  -v "$PROJECT_PATH:/workspace" \
+  -v "$CONFIG_DIR:/home/opencode_user" \
+  -v "$HOME/.ssh:/home/opencode_user/.ssh:ro" \
+  -v "$HOME/.gitconfig:/home/opencode_user/.gitconfig:ro" \
+  "$IMAGE_NAME"
