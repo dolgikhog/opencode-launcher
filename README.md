@@ -123,8 +123,24 @@ start-opencode --web --server-password mySecretPassword --server-username admin 
 ### Combining flags
 
 ```bash
-start-opencode --rebuild --web --web-port 8080 --server-password myPassword --server-username admin <path-to-project>
+start-opencode --rebuild --web --web-port 8080 --server-password myPassword --server-username admin --env "MY_VAR=value" <path-to-project>
 ```
+
+## Custom Environment Variables
+
+Pass arbitrary environment variables into the container with `--env`:
+
+```bash
+start-opencode --env "MY_VAR=value" <path-to-project>
+```
+
+Multiple variables can be passed by repeating the flag:
+
+```bash
+start-opencode --env "OPENCODE_HEADLESS=1" --env "OPENCODE_GEMINI_PROJECT_ID=my-project" <path-to-project>
+```
+
+This is useful for configuring plugins or features that rely on environment variables (e.g. Google OAuth for Gemini Code Assist -- see [GOOGLE_AUTH.md](GOOGLE_AUTH.md)).
 
 ## GitHub CLI Authentication
 

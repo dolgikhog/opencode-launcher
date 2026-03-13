@@ -5,8 +5,9 @@ WEB_MODE=false
 WEB_PORT=3000
 SERVER_PASSWORD=""
 SERVER_USERNAME=""
+CUSTOM_ENVS=()
 
-USAGE="Usage: start-opencode [--rebuild] [--web [--web-port <port>] [--server-password <password>] [--server-username <username>]] <path-to-project>"
+USAGE="Usage: start-opencode [--rebuild] [--env KEY=VALUE]... [--web [--web-port <port>] [--server-password <password>] [--server-username <username>]] <path-to-project>"
 
 # Parse flags and positional arguments (order-independent)
 PROJECT_ARG=""
@@ -15,6 +16,10 @@ while [[ $# -gt 0 ]]; do
     --rebuild)
       REBUILD=true
       shift
+      ;;
+    --env)
+      CUSTOM_ENVS+=("$2")
+      shift 2
       ;;
     --web)
       WEB_MODE=true
@@ -143,6 +148,11 @@ DOCKER_ARGS=(
   -v "$HOME/.ssh:/home/opencode_user/.ssh:ro"
   -v "$HOME/.gitconfig:/home/opencode_user/.gitconfig:ro"
 )
+
+# Pass through custom environment variables (--env KEY=VALUE)
+for env_pair in "${CUSTOM_ENVS[@]}"; do
+  DOCKER_ARGS+=(-e "$env_pair")
+done
 
 # Mount base config if present (merged with project config by OpenCode)
 if [ -f "$BASE_CONFIG" ]; then
