@@ -3,6 +3,9 @@
 _start-opencode() {
   _arguments \
     '--rebuild[Force remove and rebuild the Docker image before starting]' \
+    '--web[Start OpenCode as a web application in the browser]' \
+    '--web-port[Port for the web server (default: 3000)]:port:' \
+    '--server-password[Password for HTTP Basic Auth]:password:' \
     '1:project directory:_directories'
 }
 
