@@ -64,6 +64,11 @@ IMAGE_NAME="opencode-sandbox"
 CONFIG_DIR="$HOME/.opencode_docker_config"
 mkdir -p "$CONFIG_DIR"
 
+# Resolve the directory where this script (and base config files) live
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_CONFIG="$SCRIPT_DIR/opencode.json"
+BASE_CONFIG_DIR="$SCRIPT_DIR/config"
+
 # If --rebuild was passed, force remove the existing image
 if [ "$REBUILD" = true ] && docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
   echo "Removing existing Docker image '$IMAGE_NAME' for rebuild..."
@@ -138,6 +143,21 @@ DOCKER_ARGS=(
   -v "$HOME/.ssh:/home/opencode_user/.ssh:ro"
   -v "$HOME/.gitconfig:/home/opencode_user/.gitconfig:ro"
 )
+
+# Mount base config if present (merged with project config by OpenCode)
+if [ -f "$BASE_CONFIG" ]; then
+  DOCKER_ARGS+=(
+    -v "$BASE_CONFIG:/etc/opencode/opencode.json:ro"
+    -e "OPENCODE_CONFIG=/etc/opencode/opencode.json"
+  )
+fi
+
+if [ -d "$BASE_CONFIG_DIR" ]; then
+  DOCKER_ARGS+=(
+    -v "$BASE_CONFIG_DIR:/etc/opencode/config:ro"
+    -e "OPENCODE_CONFIG_DIR=/etc/opencode/config"
+  )
+fi
 
 # Extra args for web mode
 OPENCODE_CMD=()

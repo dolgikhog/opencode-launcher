@@ -7,6 +7,12 @@ Run OpenCode CLI inside a sandboxed Docker container. Your project is mounted at
 ```
 .
 ├── start-opencode              # Main script (builds + runs the container)
+├── opencode.json               # Base OpenCode config (plugins, models, shared settings)
+├── config/                     # Base agents, skills, commands, plugins (applied to all projects)
+│   ├── agents/
+│   ├── skills/
+│   ├── commands/
+│   └── plugins/
 ├── completions/
 │   └── _start-opencode         # Zsh autocompletion
 └── .gitignore
@@ -37,6 +43,50 @@ Rebuild the Docker image from scratch:
 ```bash
 start-opencode --rebuild <path-to-project>
 ```
+
+## Configuration
+
+OpenCode configuration is layered. The script provides a **base config** that applies to all projects, while each project can have its own **project config** that overrides or extends the base. OpenCode merges them automatically.
+
+### Base config (this repo)
+
+- **`opencode.json`** -- shared settings applied to every project: plugins, default model, permissions, etc.
+- **`config/`** -- shared agents, skills, commands, and plugins applied to every project.
+
+Edit these files to change the defaults for all projects.
+
+### Project config (in each project)
+
+Each project can optionally include:
+
+- **`opencode.json`** at the project root -- project-specific plugins and provider settings.
+- **`.opencode/`** directory -- project-specific agents, skills, commands.
+
+Project config overrides base config for conflicting keys. Non-conflicting settings from both are preserved.
+
+### Example
+
+Base `opencode.json` (this repo):
+
+```json
+{
+  "plugin": ["some-shared-plugin"],
+  "model": "anthropic/claude-sonnet-4-5"
+}
+```
+
+Project `opencode.json` (in your project root):
+
+```json
+{
+  "plugin": ["opencode-gemini-auth@latest"],
+  "provider": {
+    "google": { ... }
+  }
+}
+```
+
+Both plugin arrays are merged. The project gets shared plugins plus its own.
 
 ## Web Mode
 
