@@ -65,8 +65,11 @@ if [ ! -d "$PROJECT_PATH" ]; then
 fi
 
 IMAGE_NAME="opencode-sandbox"
-# Directory on your host to securely persist OpenCode configuration and AI auth keys
-CONFIG_DIR="$HOME/.opencode_docker_config"
+# Each project gets its own isolated home directory (auth, sessions, cache, etc.)
+# Derive a stable subdirectory from the project path: <basename>-<short-hash>
+PROJECT_HASH=$(printf '%s' "$PROJECT_PATH" | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-12)
+PROJECT_NAME=$(basename "$PROJECT_PATH")
+CONFIG_DIR="$HOME/.opencode_docker_config/${PROJECT_NAME}-${PROJECT_HASH}"
 mkdir -p "$CONFIG_DIR"
 
 # Resolve the directory where this script (and base config files) live

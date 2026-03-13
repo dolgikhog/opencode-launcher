@@ -48,6 +48,12 @@ start-opencode --rebuild <path-to-project>
 
 OpenCode configuration is layered. The script provides a **base config** that applies to all projects, while each project can have its own **project config** that overrides or extends the base. OpenCode merges them automatically.
 
+### Per-project isolation
+
+Each project gets its own fully isolated environment on the host at `~/.opencode_docker_config/<project-name>-<hash>/`. This means auth tokens, sessions, plugin cache, and all other state are completely separate between projects. The directory name combines the project folder name with a short hash of its absolute path for uniqueness.
+
+Only the base config from this repo (`opencode.json` and `config/`) is shared across projects -- mounted read-only into every container.
+
 ### Base config (this repo)
 
 - **`opencode.json`** -- shared settings applied to every project: plugins, default model, permissions, etc.

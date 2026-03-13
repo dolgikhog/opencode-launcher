@@ -47,7 +47,7 @@ start-opencode \
 7. Copy the **full URL** from the browser address bar
 8. Paste it back into OpenCode
 
-The plugin exchanges the code for tokens and stores them in `~/.local/share/opencode/auth.json` (mapped to `~/.opencode_docker_config/.local/share/opencode/auth.json` on the host when using `start-opencode.sh`). Credentials persist across container restarts.
+The plugin exchanges the code for tokens and stores them in `~/.local/share/opencode/auth.json` (mapped to `~/.opencode_docker_config/<project>-<hash>/...` on the host). Each project has its own isolated config directory, so you'll need to authenticate separately per project. Credentials persist across container restarts.
 
 ## Subsequent runs
 
