@@ -1,0 +1,9 @@
+#compdef start-opencode
+
+_start-opencode() {
+  _arguments \
+    '--rebuild[Force remove and rebuild the Docker image before starting]' \
+    '1:project directory:_directories'
+}
+
+_start-opencode "$@"

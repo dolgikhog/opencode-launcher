@@ -1,8 +1,25 @@
 #!/bin/bash
 
+REBUILD=false
+
+# Parse flags
+while [[ "$1" == --* ]]; do
+  case "$1" in
+    --rebuild)
+      REBUILD=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Usage: start-opencode [--rebuild] <path-to-project>"
+      exit 1
+      ;;
+  esac
+done
+
 # Ensure a project path was provided
 if [ -z "$1" ]; then
-  echo "Usage: start-opencode <path-to-project>"
+  echo "Usage: start-opencode [--rebuild] <path-to-project>"
   exit 1
 fi
 
@@ -19,6 +36,12 @@ IMAGE_NAME="opencode-sandbox"
 # Directory on your host to securely persist OpenCode configuration and AI auth keys
 CONFIG_DIR="$HOME/.opencode_docker_config"
 mkdir -p "$CONFIG_DIR"
+
+# If --rebuild was passed, force remove the existing image
+if [ "$REBUILD" = true ] && docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+  echo "Removing existing Docker image '$IMAGE_NAME' for rebuild..."
+  docker rmi -f "$IMAGE_NAME"
+fi
 
 # Build the Docker image if it hasn't been built yet
 if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
