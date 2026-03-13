@@ -140,8 +140,14 @@ EOF
 fi
 
 # Build the docker run command
+if [ "$WEB_MODE" = true ]; then
+  DOCKER_RUN_MODE="-d"
+else
+  DOCKER_RUN_MODE="-it"
+fi
+
 DOCKER_ARGS=(
-  --rm -it
+  --rm $DOCKER_RUN_MODE
   -u "$(id -u):$(id -g)"
   -e HOME=/home/opencode_user
   -e "GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -i /home/opencode_user/.ssh/id_ed25519 -i /home/opencode_user/.ssh/id_rsa"
@@ -175,7 +181,8 @@ fi
 # Extra args for web mode
 OPENCODE_CMD=()
 if [ "$WEB_MODE" = true ]; then
-  DOCKER_ARGS+=(-p "${WEB_PORT}:${WEB_PORT}")
+  # Web mode runs a server — use detached mode instead of interactive TTY
+  DOCKER_ARGS+=(--name "opencode-web-${WEB_PORT}" -p "${WEB_PORT}:${WEB_PORT}")
 
   if [ -n "$SERVER_PASSWORD" ]; then
     DOCKER_ARGS+=(-e "OPENCODE_SERVER_PASSWORD=${SERVER_PASSWORD}")
@@ -191,15 +198,58 @@ fi
 # Print startup info
 if [ "$WEB_MODE" = true ]; then
   echo "Starting OpenCode web interface for: $PROJECT_PATH"
-  echo "  URL: http://localhost:${WEB_PORT}"
-  if [ -n "$SERVER_PASSWORD" ]; then
-    echo "  Auth enabled (username: ${SERVER_USERNAME:-opencode})"
-  else
-    echo "  WARNING: No --server-password set. The web interface is unprotected."
-  fi
 else
   echo "Starting OpenCode securely isolated in: $PROJECT_PATH"
 fi
 
 # Run the container
-docker run "${DOCKER_ARGS[@]}" "$IMAGE_NAME" "${OPENCODE_CMD[@]}"
+if [ "$WEB_MODE" = true ]; then
+  CONTAINER_NAME="opencode-web-${WEB_PORT}"
+  # Remove any existing container with the same name
+  docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
+  CONTAINER_ID=$(docker run "${DOCKER_ARGS[@]}" "$IMAGE_NAME" "${OPENCODE_CMD[@]}")
+
+  # Wait for the server to start and stream initial logs
+  echo "Waiting for server to start..."
+  for i in $(seq 1 30); do
+    LOGS=$(docker logs "$CONTAINER_NAME" 2>&1)
+    if echo "$LOGS" | grep -qi "listening\|started\|ready\|serving"; then
+      break
+    fi
+    sleep 0.5
+  done
+
+  echo ""
+  echo "========================================="
+  echo "  OpenCode Web Server"
+  echo "========================================="
+  echo "  Container:  ${CONTAINER_ID:0:12}"
+  echo ""
+  echo "  Access URLs:"
+  echo "    http://localhost:${WEB_PORT}"
+  # Show all non-loopback IPv4 addresses
+  for ip in $(hostname -I 2>/dev/null); do
+    # Filter to IPv4 only (skip IPv6)
+    if echo "$ip" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+      echo "    http://${ip}:${WEB_PORT}"
+    fi
+  done
+  echo ""
+  if [ -n "$SERVER_PASSWORD" ]; then
+    echo "  Username:   ${SERVER_USERNAME:-opencode}"
+    echo "  Password:   ${SERVER_PASSWORD}"
+  else
+    echo "  Auth:       NONE (unprotected)"
+  fi
+  echo "========================================="
+  echo ""
+  echo "  Server logs:"
+  echo "-----------------------------------------"
+  docker logs "$CONTAINER_NAME" 2>&1
+  echo "-----------------------------------------"
+  echo ""
+  echo "  View logs:  docker logs -f $CONTAINER_NAME"
+  echo "  Stop:       docker stop $CONTAINER_NAME"
+else
+  docker run "${DOCKER_ARGS[@]}" "$IMAGE_NAME" "${OPENCODE_CMD[@]}"
+fi
