@@ -38,6 +38,25 @@ Rebuild the Docker image from scratch:
 start-opencode --rebuild <path-to-project>
 ```
 
+## GitHub CLI Authentication
+
+The container uses the `GH_TOKEN` environment variable to authenticate with GitHub. To enable `gh` commands inside the container, generate a personal access token and export it before running the script:
+
+```bash
+export GH_TOKEN="ghp_your_token_here"
+start-opencode <path-to-project>
+```
+
+Or pass it inline:
+
+```bash
+GH_TOKEN="ghp_your_token_here" start-opencode <path-to-project>
+```
+
+To generate a token, visit [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens) and create a token with the scopes you need (e.g. `repo`, `read:org`).
+
+For persistence, add `export GH_TOKEN="ghp_..."` to your `~/.zshrc` or `~/.bashrc`.
+
 ## Zsh Autocompletion
 
 Add the completions directory to your `fpath` in `~/.zshrc` (before `compinit`):
