@@ -138,7 +138,6 @@ DOCKER_ARGS=(
   -e HOME=/home/opencode_user
   -e "GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -i /home/opencode_user/.ssh/id_ed25519 -i /home/opencode_user/.ssh/id_rsa"
   -e "GH_TOKEN=${GH_TOKEN}"
-  -p 8085:8085
   -v "$PROJECT_PATH:/workspace"
   -v "$CONFIG_DIR:/home/opencode_user"
   -v "$HOME/.ssh:/home/opencode_user/.ssh:ro"
