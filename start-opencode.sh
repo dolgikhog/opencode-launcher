@@ -154,9 +154,17 @@ DOCKER_ARGS=(
   -e "GH_TOKEN=${GH_TOKEN}"
   -v "$PROJECT_PATH:/workspace"
   -v "$CONFIG_DIR:/home/opencode_user"
-  -v "$HOME/.ssh:/home/opencode_user/.ssh:ro"
-  -v "$HOME/.gitconfig:/home/opencode_user/.gitconfig:ro"
 )
+
+# Only mount .ssh if the directory exists
+if [ -d "$HOME/.ssh" ]; then
+  DOCKER_ARGS+=(-v "$HOME/.ssh:/home/opencode_user/.ssh:ro")
+fi
+
+# Only mount .gitconfig if the file exists
+if [ -f "$HOME/.gitconfig" ]; then
+  DOCKER_ARGS+=(-v "$HOME/.gitconfig:/home/opencode_user/.gitconfig:ro")
+fi
 
 # Pass through custom environment variables (--env KEY=VALUE)
 for env_pair in "${CUSTOM_ENVS[@]}"; do
@@ -207,7 +215,15 @@ if [ "$WEB_MODE" = true ]; then
   CONTAINER_NAME="opencode-web-${WEB_PORT}"
   # Remove any existing container with the same name
   docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
-  CONTAINER_ID=$(docker run "${DOCKER_ARGS[@]}" "$IMAGE_NAME" "${OPENCODE_CMD[@]}")
+  CONTAINER_ID=$(docker run "${DOCKER_ARGS[@]}" "$IMAGE_NAME" "${OPENCODE_CMD[@]}" 2>&1)
+
+  # Check if the container actually started
+  if ! docker ps -q -f "name=$CONTAINER_NAME" | grep -q .; then
+    echo ""
+    echo "ERROR: Container failed to start."
+    echo "$CONTAINER_ID"
+    exit 1
+  fi
 
   # Wait for the server to start and stream initial logs
   echo "Waiting for server to start..."
