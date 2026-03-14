@@ -269,15 +269,26 @@ else
 fi
 
 # Only mount .gitconfig if the file exists on the host.
-# Clean up stale .gitconfig directory in CONFIG_DIR that Docker may have
-# created on a previous run (Docker creates missing bind-mount targets as
-# directories, which then conflicts with file-to-file mounts).
+# Because CONFIG_DIR is itself bind-mounted as /home/opencode_user, Docker
+# cannot always create a nested mountpoint for .gitconfig on the fly.  We
+# work around this by ensuring a regular file exists at the target path
+# *before* the container starts:
+#   1. Remove any stale directory that Docker may have created on a previous
+#      run (Docker creates missing bind-mount targets as directories).
+#   2. Touch a placeholder file so the bind-mount has a valid mountpoint.
 if [ -d "$CONFIG_DIR/.gitconfig" ]; then
   log_warn "Removing stale .gitconfig directory from config dir (leftover from previous run)"
   rm -rf "$CONFIG_DIR/.gitconfig"
 fi
 
 if [ -f "$HOME/.gitconfig" ]; then
+  # Pre-create the mountpoint as a regular file inside the config dir so
+  # Docker doesn't fail with an "outside of rootfs" error when the config
+  # dir is itself a bind mount.
+  if [ ! -f "$CONFIG_DIR/.gitconfig" ]; then
+    log_debug "Pre-creating .gitconfig placeholder in config dir"
+    touch "$CONFIG_DIR/.gitconfig"
+  fi
   DOCKER_ARGS+=(-v "$HOME/.gitconfig:/home/opencode_user/.gitconfig:ro")
   log_info "Mount: ~/.gitconfig -> /home/opencode_user/.gitconfig (read-only)"
 else
