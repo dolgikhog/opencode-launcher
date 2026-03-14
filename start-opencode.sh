@@ -123,7 +123,14 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     rm -rf /var/lib/apt/lists/*
 
 # Install OpenCode CLI and make it globally accessible for the non-root user
-RUN curl -fsSL https://opencode.ai/install | bash && \
+# Try to fetch the latest version from GitHub API; fall back to a known-good
+# version when the API is unavailable (e.g. rate-limited during Docker build).
+RUN FALLBACK_VERSION="1.2.26" && \
+    LATEST=$(curl -sf https://api.github.com/repos/anomalyco/opencode/releases/latest \
+      | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' || true) && \
+    VERSION="${LATEST:-$FALLBACK_VERSION}" && \
+    echo "Installing OpenCode version: $VERSION" && \
+    curl -fsSL https://opencode.ai/install | bash -s -- --version "$VERSION" && \
     BIN_PATH=$(find /root -name "opencode" -type f -executable | head -n 1) && \
     mv "$BIN_PATH" /usr/local/bin/opencode && \
     chmod +x /usr/local/bin/opencode
