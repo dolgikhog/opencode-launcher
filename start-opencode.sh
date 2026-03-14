@@ -161,7 +161,14 @@ if [ -d "$HOME/.ssh" ]; then
   DOCKER_ARGS+=(-v "$HOME/.ssh:/home/opencode_user/.ssh:ro")
 fi
 
-# Only mount .gitconfig if the file exists
+# Only mount .gitconfig if the file exists on the host.
+# Clean up stale .gitconfig directory in CONFIG_DIR that Docker may have
+# created on a previous run (Docker creates missing bind-mount targets as
+# directories, which then conflicts with file-to-file mounts).
+if [ -d "$CONFIG_DIR/.gitconfig" ]; then
+  rm -rf "$CONFIG_DIR/.gitconfig"
+fi
+
 if [ -f "$HOME/.gitconfig" ]; then
   DOCKER_ARGS+=(-v "$HOME/.gitconfig:/home/opencode_user/.gitconfig:ro")
 fi
