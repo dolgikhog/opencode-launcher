@@ -217,6 +217,11 @@ RUN FALLBACK_VERSION="1.2.26" && \
     mv "$BIN_PATH" /usr/local/bin/opencode && \
     chmod +x /usr/local/bin/opencode
 
+# Install uv (Python package runner)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /usr/local/bin/uv && \
+    mv /root/.local/bin/uvx /usr/local/bin/uvx
+
 # Set default workspace
 WORKDIR /workspace
 ENTRYPOINT ["opencode"]
