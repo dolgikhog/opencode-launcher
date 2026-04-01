@@ -40,12 +40,14 @@ log_section() {
 # ---------------------------------------------------------------------------
 REBUILD=false
 WEB_MODE=false
+WITH_OMO=false
 WEB_PORT=3000
 SERVER_PASSWORD=""
 SERVER_USERNAME=""
 CUSTOM_ENVS=()
+EXPOSE_PORTS=()
 
-USAGE="Usage: start-opencode [--rebuild] [--env KEY=VALUE]... [--web [--web-port <port>] [--server-password <password>] [--server-username <username>]] <path-to-project>"
+USAGE="Usage: start-opencode [--rebuild] [--env KEY=VALUE]... [--expose-port <port>]... [--with-omo] [--web [--web-port <port>] [--server-password <password>] [--server-username <username>]] <path-to-project>"
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -65,6 +67,16 @@ while [[ $# -gt 0 ]]; do
       CUSTOM_ENVS+=("$2")
       log_info "Flag: --env '$2'"
       shift 2
+      ;;
+    --expose-port)
+      EXPOSE_PORTS+=("$2")
+      log_info "Flag: --expose-port '$2'"
+      shift 2
+      ;;
+    --with-omo)
+      WITH_OMO=true
+      log_info "Flag: --with-omo enabled"
+      shift
       ;;
     --web)
       WEB_MODE=true
@@ -222,6 +234,9 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv && \
     mv /root/.local/bin/uvx /usr/local/bin/uvx
 
+# Install oh-my-openagent globally
+RUN npm install -g oh-my-opencode
+
 # Set default workspace
 WORKDIR /workspace
 ENTRYPOINT ["opencode"]
@@ -234,6 +249,51 @@ EOF
   log_ok "Docker image '$IMAGE_NAME' built successfully"
 else
   log_ok "Docker image '$IMAGE_NAME' already exists – skipping build"
+fi
+
+# ---------------------------------------------------------------------------
+# Auth Sharing & OMO Injection
+# ---------------------------------------------------------------------------
+log_section "Environment Customization"
+
+# Share host OpenCode auth if available to prevent "auth fatigue"
+HOST_OC_CONFIG="$HOME/.config/opencode"
+CONTAINER_OC_CONFIG="$CONFIG_DIR/.config/opencode"
+mkdir -p "$CONTAINER_OC_CONFIG"
+
+if [ -f "$HOST_OC_CONFIG/auth.json" ]; then
+  cp "$HOST_OC_CONFIG/auth.json" "$CONTAINER_OC_CONFIG/auth.json"
+  log_info "Copied auth.json from host to sandbox"
+else
+  log_debug "No host auth.json found at $HOST_OC_CONFIG"
+fi
+
+if [ "$WITH_OMO" = true ]; then
+  log_info "Injecting oh-my-openagent configurations for Copilot"
+  
+  # Gracefully add the plugin and ensure /workspace is available without overwriting
+  if [ ! -f "$CONTAINER_OC_CONFIG/opencode.json" ]; then
+    echo '{}' > "$CONTAINER_OC_CONFIG/opencode.json"
+  fi
+  TMP_JSON=$(mktemp)
+  jq '.plugin = ((.plugin // []) + ["oh-my-openagent"] | unique) | .workspaces = ((.workspaces // []) + ["/workspace"] | unique)' "$CONTAINER_OC_CONFIG/opencode.json" > "$TMP_JSON"
+  mv "$TMP_JSON" "$CONTAINER_OC_CONFIG/opencode.json"
+
+  # Create OMO config with explicitly allowed Copilot models
+  cat > "$CONTAINER_OC_CONFIG/oh-my-openagent.jsonc" << 'EOF'
+{
+  "agents": {
+    "sisyphus": { "model": "github-copilot/claude-opus-4.6" },
+    "prometheus": { "model": "github-copilot/claude-opus-4.6" },
+    "oracle": { "model": "github-copilot/claude-opus-4.6" },
+    "explore": { "model": "github-copilot/claude-haiku-4.5" },
+    "librarian": { "model": "github-copilot/claude-haiku-4.5" },
+    "atlas": { "model": "github-copilot/claude-sonnet-4.6" },
+    "multimodal-looker": { "model": "github-copilot/gemini-3.1-pro-preview" },
+    "hephaestus": { "model": "github-copilot/claude-opus-4.6" }
+  }
+}
+EOF
 fi
 
 # ---------------------------------------------------------------------------
@@ -311,6 +371,17 @@ if [ ${#CUSTOM_ENVS[@]} -gt 0 ]; then
   done
 else
   log_debug "No custom environment variables"
+fi
+
+# Expose additional ports (--expose-port)
+if [ ${#EXPOSE_PORTS[@]} -gt 0 ]; then
+  log_info "Exposing ${#EXPOSE_PORTS[@]} additional port(s):"
+  for port in "${EXPOSE_PORTS[@]}"; do
+    DOCKER_ARGS+=(-p "${port}:${port}")
+    log_info "  Port mapping: host ${port} -> container ${port}"
+  done
+else
+  log_debug "No additional ports to expose"
 fi
 
 # Mount base config if present (merged with project config by OpenCode)
