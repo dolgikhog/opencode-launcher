@@ -102,7 +102,17 @@ Run OpenCode as a web application accessible from your browser:
 start-opencode --web <path-to-project>
 ```
 
-This starts the container with a web server on port `3000` by default. Open `http://localhost:3000` in your browser to access the interface.
+This starts the container with a web server on port `3000` by default. The server automatically binds to your local network IP, so you can access it from any device on the same WiFi/LAN (phone, tablet, another laptop) while keeping it inaccessible from the public internet.
+
+The startup output will show the access URL, e.g.:
+
+```
+  Access URL:
+    http://192.168.1.50:3000
+
+  Bound to LAN only (192.168.1.50)
+  Use this URL from any device on your network.
+```
 
 ### Custom port
 
@@ -125,6 +135,17 @@ start-opencode --web --server-password mySecretPassword --server-username admin 
 ```
 
 > **Note:** If you don't set a password, the web interface will be accessible to anyone who can reach the port. Always use `--server-password` when exposing the server on a network.
+
+### Why LAN-only by default?
+
+The web server is bound to your machine's local network IP rather than `0.0.0.0` (all interfaces). This is intentional — when working with company projects, you don't want the interface publicly reachable. Binding to the LAN IP means:
+
+- **Same WiFi/LAN**: your phone, tablet, or other laptops can connect.
+- **Outside your network**: nobody can reach it.
+
+This is enforced at the Docker port-mapping level (`-p <lan-ip>:3000:3000`), not within OpenCode itself — so it works regardless of what the application does internally. The OpenCode server inside the container still listens on `0.0.0.0`, but Docker only forwards traffic arriving on your LAN IP.
+
+If auto-detection fails (e.g. no network), it falls back to `0.0.0.0` with a warning.
 
 ### Combining flags
 

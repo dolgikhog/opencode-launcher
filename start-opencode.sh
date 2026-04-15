@@ -122,6 +122,45 @@ EXPOSE_PORTS=()
 USAGE="Usage: start-opencode [--rebuild] [--env KEY=VALUE]... [--env-redact KEY=VALUE]... [--expose-env] [--expose-port <port>]... [--with-omo] [--web [--web-port <port>] [--server-password <password>] [--server-username <username>]] <path-to-project>"
 
 # ---------------------------------------------------------------------------
+# LAN IP auto-detection
+# ---------------------------------------------------------------------------
+# Returns the first non-loopback IPv4 address of the host machine.  This is
+# used in web mode to bind the Docker port mapping to the local network
+# interface only — so the server is reachable from other devices on the same
+# WiFi/LAN but not from the public internet.
+#
+# Detection order:
+#   1. `ip route get` – most reliable on Linux (asks the kernel directly)
+#   2. `ipconfig getifaddr en0` – macOS Wi-Fi interface
+#   3. `hostname -I` – fallback for Linux systems without `ip`
+#   4. 0.0.0.0 – if nothing works, bind to all interfaces as a last resort
+_detect_lan_ip() {
+  local ip=""
+
+  # Linux: ask the kernel which source IP it would use to reach 1.1.1.1
+  if command -v ip >/dev/null 2>&1; then
+    ip=$(ip route get 1.1.1.1 2>/dev/null | sed -n 's/.*src \([0-9.]*\).*/\1/p' | head -n1)
+  fi
+
+  # macOS: Wi-Fi adapter
+  if [ -z "$ip" ] && command -v ipconfig >/dev/null 2>&1; then
+    ip=$(ipconfig getifaddr en0 2>/dev/null)
+  fi
+
+  # Fallback: first non-loopback IPv4 from hostname
+  if [ -z "$ip" ]; then
+    ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -v '^127\.' | head -n1)
+  fi
+
+  # Last resort
+  if [ -z "$ip" ]; then
+    ip="0.0.0.0"
+  fi
+
+  echo "$ip"
+}
+
+# ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
 log_section "Parsing arguments"
@@ -438,11 +477,91 @@ if [ "$WITH_OMO" = true ]; then
         rm -f "$TMP_JSON"
       fi
 
-  # Create OMO config with explicitly allowed Copilot models
-  cat > "$CONTAINER_OC_CONFIG/oh-my-openagent.jsonc" << 'EOF'
+  # ---------------------------------------------------------------------------
+  # Build Docker context string for prompt_append
+  # ---------------------------------------------------------------------------
+  # Assembled conditionally based on what the script is injecting into the
+  # container.  Embedded directly into oh-my-openagent.jsonc as a JSON string
+  # (no file:// URI — OMO restricts those to within the project root).
+  log_section "Generating Docker context for OpenCode"
+
+  DOCKER_CTX="# Runtime Environment\n"
+  DOCKER_CTX+="You are running inside an isolated Docker container (\`opencode-sandbox\`, Ubuntu 24.04).\n"
+  DOCKER_CTX+="\n## Workspace\n"
+  DOCKER_CTX+="- Your project is mounted at \`/workspace\` — file changes here persist on the host.\n"
+  DOCKER_CTX+="- Everything outside \`/workspace\` is ephemeral and will be lost when the container stops.\n"
+  DOCKER_CTX+="\n## Installed tools\n"
+  DOCKER_CTX+="git, gh (GitHub CLI), node, npm, python3, uv/uvx (Python package runner), jq, ripgrep, curl, wget, java (JRE), kotlin-lsp\n"
+
+  if [ -d "$HOME/.ssh" ]; then
+    DOCKER_CTX+="\n## SSH access\nHost SSH keys are mounted read-only. You can use git over SSH and connect to remote hosts.\n"
+    log_debug "Docker context: SSH keys available"
+  else
+    DOCKER_CTX+="\n## SSH access\nNo SSH keys are available in this session.\n"
+    log_debug "Docker context: no SSH keys"
+  fi
+
+  _has_custom_env() {
+    local key="$1"
+    for env_pair in "${CUSTOM_ENVS[@]}"; do
+      if [ "${env_pair%%=*}" = "$key" ]; then
+        return 0
+      fi
+    done
+    return 1
+  }
+
+  if [ -n "${GH_TOKEN:-}" ] || _has_custom_env "GH_TOKEN"; then
+    DOCKER_CTX+="\n## GitHub CLI\n\`gh\` is authenticated via GH_TOKEN. You can create PRs, issues, browse repos, etc.\n"
+    log_debug "Docker context: GH_TOKEN present"
+  else
+    DOCKER_CTX+="\n## GitHub CLI\n\`gh\` is installed but no GH_TOKEN was provided. GitHub API calls requiring authentication will fail.\n"
+    log_debug "Docker context: no GH_TOKEN"
+  fi
+
+  if [ -f "$HOME/.gitconfig" ]; then
+    DOCKER_CTX+="\n## Git\nHost \`.gitconfig\` is mounted read-only. Your git identity and aliases are available.\n"
+    log_debug "Docker context: .gitconfig mounted"
+  fi
+
+  if [ "$WEB_MODE" = true ]; then
+    DOCKER_CTX+="\n## Web mode\nRunning as a web server on port ${WEB_PORT}.\n"
+    log_debug "Docker context: web mode on port $WEB_PORT"
+  fi
+
+  if [ ${#EXPOSE_PORTS[@]} -gt 0 ]; then
+    DOCKER_CTX+="\n## Exposed ports\n"
+    for port in "${EXPOSE_PORTS[@]}"; do
+      DOCKER_CTX+="- Port ${port} is mapped from container to host.\n"
+    done
+    log_debug "Docker context: ${#EXPOSE_PORTS[@]} exposed port(s)"
+  fi
+
+  DOCKER_CTX+="\n## Constraints\n"
+  DOCKER_CTX+="- You cannot install system packages (no root/sudo access).\n"
+  DOCKER_CTX+="- The container has unrestricted outbound network access.\n"
+
+  log_ok "Docker context assembled"
+  log_debug "Docker context content:\n$(printf '%b' "$DOCKER_CTX")"
+
+  # JSON-escape the context string and write oh-my-openagent.jsonc with it
+  # inlined in sisyphus.prompt_append.
+  DOCKER_CTX_EXPANDED=$(printf '%b' "$DOCKER_CTX")
+  if command -v python3 >/dev/null 2>&1; then
+    DOCKER_CTX_JSON=$(python3 -c "import json,sys; print(json.dumps(sys.stdin.read()))" <<< "$DOCKER_CTX_EXPANDED")
+  elif command -v jq >/dev/null 2>&1; then
+    DOCKER_CTX_JSON=$(jq -Rs '.' <<< "$DOCKER_CTX_EXPANDED")
+  else
+    DOCKER_CTX_JSON=$(docker run --rm -i --entrypoint jq "$IMAGE_NAME" -Rs '.' <<< "$DOCKER_CTX_EXPANDED")
+  fi
+
+  cat > "$CONTAINER_OC_CONFIG/oh-my-openagent.jsonc" << OMOEOF
 {
   "agents": {
-    "sisyphus": { "model": "github-copilot/claude-opus-4.6" },
+    "sisyphus": {
+      "model": "github-copilot/claude-opus-4.6",
+      "prompt_append": ${DOCKER_CTX_JSON}
+    },
     "prometheus": { "model": "github-copilot/claude-opus-4.6" },
     "oracle": { "model": "github-copilot/claude-opus-4.6" },
     "explore": { "model": "github-copilot/claude-haiku-4.5" },
@@ -461,7 +580,8 @@ if [ "$WITH_OMO" = true ]; then
     }
   }
 }
-EOF
+OMOEOF
+  log_ok "oh-my-openagent.jsonc written with Docker context"
 fi
 
 # ---------------------------------------------------------------------------
@@ -589,10 +709,15 @@ OPENCODE_CMD=()
 if [ "$WEB_MODE" = true ]; then
   log_section "Web mode setup"
 
-  # Web mode runs a server — use detached mode instead of interactive TTY
-  DOCKER_ARGS+=(--name "opencode-web-${WEB_PORT}" -p "${WEB_PORT}:${WEB_PORT}")
+  WEB_HOST=$(_detect_lan_ip)
+  DOCKER_ARGS+=(--name "opencode-web-${WEB_PORT}" -p "${WEB_HOST}:${WEB_PORT}:${WEB_PORT}")
   log_info "Container name: opencode-web-${WEB_PORT}"
-  log_info "Port mapping: host ${WEB_PORT} -> container ${WEB_PORT}"
+  if [ "$WEB_HOST" = "0.0.0.0" ]; then
+    log_warn "Could not detect LAN IP – binding to all interfaces"
+  else
+    log_info "Binding to LAN IP: $WEB_HOST"
+  fi
+  log_info "Port mapping: ${WEB_HOST}:${WEB_PORT} -> container ${WEB_PORT}"
 
   if [ -n "$SERVER_PASSWORD" ]; then
     DOCKER_ARGS+=(-e "OPENCODE_SERVER_PASSWORD=${SERVER_PASSWORD}")
@@ -688,15 +813,13 @@ if [ "$WEB_MODE" = true ]; then
   echo "========================================="
   echo "  Container:  ${CONTAINER_ID:0:12}"
   echo ""
-  echo "  Access URLs:"
-  echo "    http://localhost:${WEB_PORT}"
-  # Show all non-loopback IPv4 addresses
-  for ip in $(hostname -I 2>/dev/null); do
-    # Filter to IPv4 only (skip IPv6)
-    if echo "$ip" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
-      echo "    http://${ip}:${WEB_PORT}"
-    fi
-  done
+  echo "  Access URL:"
+  echo "    http://${WEB_HOST}:${WEB_PORT}"
+  if [ "$WEB_HOST" != "0.0.0.0" ]; then
+    echo ""
+    echo "  Bound to LAN only (${WEB_HOST})"
+    echo "  Use this URL from any device on your network."
+  fi
   echo ""
   if [ -n "$SERVER_PASSWORD" ]; then
     echo "  Username:   ${SERVER_USERNAME:-opencode}"
