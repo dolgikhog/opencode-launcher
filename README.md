@@ -212,3 +212,19 @@ autoload -Uz compinit && compinit
 ```
 
 Restart your shell or run `exec zsh` to pick up changes.
+
+## Docker Context Awareness
+
+When running with `--with-omo`, the script makes the OpenCode agent aware of its Docker environment by injecting runtime context into the agent's system prompt. The agent learns what container it's in, what tools are installed, which credentials are available (SSH, GitHub CLI, git config), whether it's in web mode, and what constraints apply (no sudo, ephemeral filesystem outside `/workspace`).
+
+This context is assembled dynamically at launch time based on what the script actually passes into the container — so if you don't mount SSH keys, the agent knows SSH isn't available.
+
+### Why `oh-my-openagent` and not native OpenCode config?
+
+OpenCode has a `contextPaths` config key in its source code that would do exactly this — point to an arbitrary markdown file and inject it into the system prompt. However, the released versions don't recognize this key yet (the project-level `opencode.json` rejects it as `Unrecognized key: "contextPaths"`).
+
+The next option was using a `file://` URI in oh-my-openagent's `prompt_append` field, pointing to a generated markdown file mounted at `/etc/opencode/`. This also failed — oh-my-openagent has a security check (`isWithinProject`) that rejects file URIs pointing outside the project root (`/workspace`).
+
+The working solution: the script builds the context string in bash, JSON-escapes it, and inlines it directly into `oh-my-openagent.jsonc` as the `sisyphus.prompt_append` value. No external file references, no project directory pollution. The context lives in the per-project config directory alongside `oh-my-openagent.jsonc` and gets appended to the Sisyphus agent's system prompt at startup.
+
+When OpenCode ships `contextPaths` support in a release, this can be simplified to a single config entry pointing to a mounted markdown file.
