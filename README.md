@@ -150,7 +150,7 @@ If auto-detection fails (e.g. no network), it falls back to `0.0.0.0` with a war
 ### Combining flags
 
 ```bash
-start-opencode --rebuild --web --web-port 8080 --server-password myPassword --server-username admin --env "MY_VAR=value" <path-to-project>
+start-opencode --rebuild --with-omo --web --web-port 8080 --server-password myPassword --server-username admin --env "MY_VAR=value" --env-redact "SECRET_KEY=abc" --expose-port 5173 <path-to-project>
 ```
 
 ## Custom Environment Variables
@@ -168,6 +168,46 @@ start-opencode --env "OPENCODE_HEADLESS=1" --env "OPENCODE_GEMINI_PROJECT_ID=my-
 ```
 
 This is useful for configuring plugins or features that rely on environment variables (e.g. Google OAuth for Gemini Code Assist -- see [GOOGLE_AUTH.md](GOOGLE_AUTH.md)).
+
+### Sensitive variables (`--env-redact`)
+
+For environment variables containing secrets (API keys, tokens, passwords), use `--env-redact` instead of `--env`. The variable is passed into the container identically, but its value is masked in all startup logs:
+
+```bash
+start-opencode --env-redact "SECRET_API_KEY=sk-abc123" <path-to-project>
+```
+
+In the logs you'll see `SECRET_API_KEY=***REDACTED***` instead of the actual value. You can mix `--env` and `--env-redact` freely:
+
+```bash
+start-opencode --env "NODE_ENV=production" --env-redact "DATABASE_URL=postgres://..." <path-to-project>
+```
+
+> **Note:** `--server-password` is automatically redacted in logs — you don't need to do anything extra for it.
+
+### Showing redacted values (`--expose-env`)
+
+If you need to debug environment variable issues and want to see all values including redacted ones, pass `--expose-env`:
+
+```bash
+start-opencode --expose-env --env-redact "SECRET_API_KEY=sk-abc123" <path-to-project>
+```
+
+This overrides all redaction and shows raw values in the startup logs. Only use this for debugging — don't leave it on in normal usage.
+
+## Exposing Additional Ports
+
+If your project runs a dev server, database, or any other service that needs to be reachable from the host, use `--expose-port`:
+
+```bash
+start-opencode --expose-port 5173 <path-to-project>
+```
+
+This maps host port 5173 to container port 5173. Repeat the flag for multiple ports:
+
+```bash
+start-opencode --expose-port 5173 --expose-port 5432 <path-to-project>
+```
 
 ## GitHub CLI Authentication
 
@@ -213,9 +253,15 @@ autoload -Uz compinit && compinit
 
 Restart your shell or run `exec zsh` to pick up changes.
 
-## Docker Context Awareness
+## Docker Context Awareness (`--with-omo`)
 
-When running with `--with-omo`, the script makes the OpenCode agent aware of its Docker environment by injecting runtime context into the agent's system prompt. The agent learns what container it's in, what tools are installed, which credentials are available (SSH, GitHub CLI, git config), whether it's in web mode, and what constraints apply (no sudo, ephemeral filesystem outside `/workspace`).
+Enable the [oh-my-opencode](https://github.com/nicepkg/oh-my-opencode) agent plugin with `--with-omo`:
+
+```bash
+start-opencode --with-omo <path-to-project>
+```
+
+This installs the `oh-my-opencode` plugin into the container's OpenCode config and injects runtime context into the agent's system prompt. The agent learns what container it's in, what tools are installed, which credentials are available (SSH, GitHub CLI, git config), whether it's in web mode, and what constraints apply (no sudo, ephemeral filesystem outside `/workspace`).
 
 This context is assembled dynamically at launch time based on what the script actually passes into the container — so if you don't mount SSH keys, the agent knows SSH isn't available.
 
