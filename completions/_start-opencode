@@ -4,6 +4,10 @@ _start-opencode() {
   _arguments \
     '--rebuild[Force remove and rebuild the Docker image before starting]' \
     '*--env[Pass environment variable to the container (KEY=VALUE)]:env pair:' \
+    '*--env-redact[Pass sensitive environment variable (value redacted in logs) (KEY=VALUE)]:env pair:' \
+    '--expose-env[Show redacted environment variable values in logs]' \
+    '*--expose-port[Expose additional container port to the host]:port:' \
+    '--with-omo[Enable oh-my-opencode agent plugin]' \
     '--web[Start OpenCode as a web application in the browser]' \
     '--web-public[Bind web server to all interfaces (default: LAN only)]' \
     '--web-port[Port for the web server (default: 3000)]:port:' \
