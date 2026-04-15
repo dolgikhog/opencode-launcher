@@ -110,6 +110,7 @@ _is_redacted_key() {
 # ---------------------------------------------------------------------------
 REBUILD=false
 WEB_MODE=false
+WEB_PUBLIC=false
 WITH_OMO=false
 EXPOSE_ENV=false
 WEB_PORT=3000
@@ -119,7 +120,7 @@ CUSTOM_ENVS=()
 REDACTED_KEYS=()
 EXPOSE_PORTS=()
 
-USAGE="Usage: start-opencode [--rebuild] [--env KEY=VALUE]... [--env-redact KEY=VALUE]... [--expose-env] [--expose-port <port>]... [--with-omo] [--web [--web-port <port>] [--server-password <password>] [--server-username <username>]] <path-to-project>"
+USAGE="Usage: start-opencode [--rebuild] [--env KEY=VALUE]... [--env-redact KEY=VALUE]... [--expose-env] [--expose-port <port>]... [--with-omo] [--web [--web-public] [--web-port <port>] [--server-password <password>] [--server-username <username>]] <path-to-project>"
 
 # ---------------------------------------------------------------------------
 # LAN IP auto-detection
@@ -204,6 +205,11 @@ while [[ $# -gt 0 ]]; do
     --web)
       WEB_MODE=true
       log_info "Flag: --web enabled"
+      shift
+      ;;
+    --web-public)
+      WEB_PUBLIC=true
+      log_info "Flag: --web-public enabled (server will bind to all interfaces)"
       shift
       ;;
     --web-port)
@@ -709,14 +715,19 @@ OPENCODE_CMD=()
 if [ "$WEB_MODE" = true ]; then
   log_section "Web mode setup"
 
-  WEB_HOST=$(_detect_lan_ip)
+  if [ "$WEB_PUBLIC" = true ]; then
+    WEB_HOST="0.0.0.0"
+    log_warn "Public mode: binding to all interfaces (0.0.0.0)"
+  else
+    WEB_HOST=$(_detect_lan_ip)
+    if [ "$WEB_HOST" = "0.0.0.0" ]; then
+      log_warn "Could not detect LAN IP – binding to all interfaces"
+    else
+      log_info "Binding to LAN IP: $WEB_HOST"
+    fi
+  fi
   DOCKER_ARGS+=(--name "opencode-web-${WEB_PORT}" -p "${WEB_HOST}:${WEB_PORT}:${WEB_PORT}")
   log_info "Container name: opencode-web-${WEB_PORT}"
-  if [ "$WEB_HOST" = "0.0.0.0" ]; then
-    log_warn "Could not detect LAN IP – binding to all interfaces"
-  else
-    log_info "Binding to LAN IP: $WEB_HOST"
-  fi
   log_info "Port mapping: ${WEB_HOST}:${WEB_PORT} -> container ${WEB_PORT}"
 
   if [ -n "$SERVER_PASSWORD" ]; then

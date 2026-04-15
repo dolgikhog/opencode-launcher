@@ -160,6 +160,14 @@ This is enforced at the Docker port-mapping level (`-p <lan-ip>:3000:3000`), not
 
 If auto-detection fails (e.g. no network), it falls back to `0.0.0.0` with a warning.
 
+To explicitly make the server publicly accessible (bind to all interfaces), use `--web-public`:
+
+```bash
+start-opencode --web --web-public --server-password mySecretPassword <path-to-project>
+```
+
+> **⚠️ Warning:** `--web-public` exposes the server on all network interfaces. Always use `--server-password` with it.
+
 ### Combining flags
 
 ```bash
