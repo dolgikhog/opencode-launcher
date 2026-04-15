@@ -1,6 +1,19 @@
 # start-opencode.sh
 
-Run OpenCode CLI inside a sandboxed Docker container. Your project is mounted at `/workspace`, config and auth keys persist across runs, and SSH/git access works out of the box.
+Run [OpenCode](https://github.com/nicepkg/opencode) CLI inside a sandboxed Docker container. Your project is mounted at `/workspace`, config and auth keys persist across runs, and SSH/git access works out of the box.
+
+## Why a container?
+
+Modern AI coding agents run directly on your machine — they can read any file your user can, access environment variables (API keys, tokens, credentials), browse your home directory, and execute arbitrary shell commands. That's a lot of trust to place in a tool that's essentially an LLM deciding what to do next.
+
+Running OpenCode inside a Docker container solves this by giving the agent **only what it needs** for a particular project:
+
+- **Security** — the agent can only see the project directory you explicitly mount. Your home directory, other projects, host credentials, and system files are invisible. Environment variables are passed in selectively, not inherited wholesale.
+- **Ready to go** — the container ships pre-configured with tools (git, gh, node, python, ripgrep, etc.), plugins, agent configs, and LSP servers. Anyone on the team can `start-opencode <project>` without setting up anything themselves.
+- **Consistent environment** — same toolchain regardless of whether the host is macOS, Ubuntu, or Arch. No "works on my machine" issues for the AI agent.
+- **Per-project isolation** — each project gets its own state directory (auth tokens, sessions, plugin cache). One project's config never leaks into another.
+- **Clean teardown** — when the container stops, everything outside `/workspace` disappears. No leftover processes, temp files, or daemon state on the host.
+- **Web access** — run OpenCode as a web app accessible from your phone or tablet on the same network, with authentication and LAN-only binding handled automatically.
 
 ## Project Structure
 
@@ -211,22 +224,13 @@ start-opencode --expose-port 5173 --expose-port 5432 <path-to-project>
 
 ## GitHub CLI Authentication
 
-The container uses the `GH_TOKEN` environment variable to authenticate with GitHub. To enable `gh` commands inside the container, generate a personal access token and export it before running the script:
+The container uses the `GH_TOKEN` environment variable to authenticate with GitHub. Pass it like any other secret:
 
 ```bash
-export GH_TOKEN="ghp_your_token_here"
-start-opencode <path-to-project>
-```
-
-Or pass it inline:
-
-```bash
-GH_TOKEN="ghp_your_token_here" start-opencode <path-to-project>
+start-opencode --env-redact "GH_TOKEN=ghp_your_token_here" <path-to-project>
 ```
 
 To generate a token, visit [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens) and create a token with the scopes you need (e.g. `repo`, `read:org`).
-
-For persistence, add `export GH_TOKEN="ghp_..."` to your `~/.zshrc` or `~/.bashrc`.
 
 ## Zsh Autocompletion
 
@@ -253,7 +257,7 @@ autoload -Uz compinit && compinit
 
 Restart your shell or run `exec zsh` to pick up changes.
 
-## Docker Context Awareness (`--with-omo`)
+## oh-my-opencode Integration (`--with-omo`)
 
 Enable the [oh-my-opencode](https://github.com/nicepkg/oh-my-opencode) agent plugin with `--with-omo`:
 
@@ -261,11 +265,18 @@ Enable the [oh-my-opencode](https://github.com/nicepkg/oh-my-opencode) agent plu
 start-opencode --with-omo <path-to-project>
 ```
 
-This installs the `oh-my-opencode` plugin into the container's OpenCode config and injects runtime context into the agent's system prompt. The agent learns what container it's in, what tools are installed, which credentials are available (SSH, GitHub CLI, git config), whether it's in web mode, and what constraints apply (no sudo, ephemeral filesystem outside `/workspace`).
+This does two things:
+
+1. **Installs the oh-my-opencode plugin** — adds it to the container's `opencode.json` and writes an `oh-my-openagent.jsonc` config with agent model assignments (Sisyphus, Oracle, Prometheus, etc.) and LSP settings (e.g. Kotlin LSP with JVM tuning).
+2. **Injects Docker context into the agent's system prompt** — so the agent knows it's running inside a container and can act accordingly (see below).
+
+### Docker context awareness
+
+When `--with-omo` is active, the script assembles a runtime context string and embeds it into the agent's system prompt via oh-my-openagent's `prompt_append` field. The agent learns what container it's in, what tools are installed, which credentials are available (SSH, GitHub CLI, git config), whether it's in web mode, and what constraints apply (no sudo, ephemeral filesystem outside `/workspace`).
 
 This context is assembled dynamically at launch time based on what the script actually passes into the container — so if you don't mount SSH keys, the agent knows SSH isn't available.
 
-### Why `oh-my-openagent` and not native OpenCode config?
+#### Why `prompt_append` and not native OpenCode config?
 
 OpenCode has a `contextPaths` config key in its source code that would do exactly this — point to an arbitrary markdown file and inject it into the system prompt. However, the released versions don't recognize this key yet (the project-level `opencode.json` rejects it as `Unrecognized key: "contextPaths"`).
 
